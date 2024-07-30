@@ -21,12 +21,14 @@ const style = {
 
 export default function Home() {
   const [pantry, setPantry] = useState([]);
-
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredPantry, setFilteredPantry] = useState([]);
   const [open, setOpen] = useState(false);
+  const [itemname, setItemname] = useState('');
+
   const handleOpen = () => setOpen(true);
   const handleClose = () => setOpen(false);
 
-  const [itemname, setItemname] = useState('');
   const updatePantry = async () => {
     const snapshot = query(collection(firestore, 'pantry'));
     const pantrylist = [];
@@ -36,6 +38,7 @@ export default function Home() {
     });
     console.log(pantrylist);
     setPantry(pantrylist);
+    setFilteredPantry(pantrylist); // Initialize filtered list
   };
 
   useEffect(() => {
@@ -44,32 +47,24 @@ export default function Home() {
 
   const addItem = async (item) => {
     const docRef = doc(collection(firestore, 'pantry'), item);
-
     const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const {count} = docSnap.data()
-      await setDoc(docRef, { count: count + 1 });
-    } else {
-      await setDoc(docRef, { count: 1 });
-    }
-    // console.log(docSnap.data());
-    // await setDoc(docRef, { count: 1 });
+    console.log(docSnap.data());
+    await setDoc(docRef, { count: 1 });
     await updatePantry();
   };
 
   const removeItem = async (item) => {
     const docRef = doc(collection(firestore, 'pantry'), item);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const {count} = docSnap.data()
-      if (count > 1) {
-        await setDoc(docRef, { count: count - 1 });
-      } else {
-        await deleteDoc(docRef);
-      }
-    }
-    // await deleteDoc(docRef);
+    await deleteDoc(docRef);
     await updatePantry();
+  };
+
+  const handleSearchChange = (event) => {
+    setSearchTerm(event.target.value);
+    const filteredItems = pantry.filter((item) =>
+      item.name.toLowerCase().includes(event.target.value.toLowerCase())
+    );
+    setFilteredPantry(filteredItems);
   };
 
   return (
@@ -117,6 +112,15 @@ export default function Home() {
       <Button variant="contained" onClick={handleOpen}>
         Add
       </Button>
+      <TextField
+        id="search-bar"
+        label="Search Items"
+        variant="outlined"
+        width = "100vw"
+        value={searchTerm}
+        onChange={handleSearchChange}
+        style={{ marginBottom: '16px' }}
+      />
       <Box border="1px solid #333">
         <Box
           width="800px"
@@ -131,11 +135,11 @@ export default function Home() {
           </Typography>
         </Box>
         <Stack width="800px" height="250px" spacing={2} overflow="scroll">
-          {pantry.map(({ name, count }) => (
+          {filteredPantry.map(({ name, count }) => (
             <Box
               key={name}
               width="100%"
-              minHeight="300px"
+              minHeight="100px"
               display="flex"
               justifyContent="space-between"
               paddingX={5}
