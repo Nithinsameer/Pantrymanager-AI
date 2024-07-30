@@ -21,13 +21,12 @@ const style = {
 
 export default function Home() {
   const [pantry, setPantry] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filteredPantry, setFilteredPantry] = useState([]);
   const [open, setOpen] = useState(false);
-  const [itemname, setItemname] = useState('');
-
   const handleOpen = () => setOpen(true);
   const handleClose = () => setOpen(false);
+  const [itemname, setItemname] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filteredPantry, setFilteredPantry] = useState([]);
 
   const updatePantry = async () => {
     const snapshot = query(collection(firestore, 'pantry'));
@@ -47,15 +46,31 @@ export default function Home() {
 
   const addItem = async (item) => {
     const docRef = doc(collection(firestore, 'pantry'), item);
+
     const docSnap = await getDoc(docRef);
-    console.log(docSnap.data());
-    await setDoc(docRef, { count: 1 });
+    if (docSnap.exists()) {
+      const {count} = docSnap.data()
+      await setDoc(docRef, { count: count + 1 });
+    } else {
+      await setDoc(docRef, { count: 1 });
+    }
+    // console.log(docSnap.data());
+    // await setDoc(docRef, { count: 1 });
     await updatePantry();
   };
 
   const removeItem = async (item) => {
     const docRef = doc(collection(firestore, 'pantry'), item);
-    await deleteDoc(docRef);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const {count} = docSnap.data()
+      if (count > 1) {
+        await setDoc(docRef, { count: count - 1 });
+      } else {
+        await deleteDoc(docRef);
+      }
+    }
+    // await deleteDoc(docRef);
     await updatePantry();
   };
 
@@ -116,7 +131,7 @@ export default function Home() {
         id="search-bar"
         label="Search Items"
         variant="outlined"
-        width = "100vw"
+        fullWidth
         value={searchTerm}
         onChange={handleSearchChange}
         style={{ marginBottom: '16px' }}
