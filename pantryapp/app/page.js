@@ -1,8 +1,15 @@
 'use client';
-import { Box, Container, Typography, Button, Modal, TextField, AppBar, Toolbar, IconButton, List, ListItem, ListItemText, ListItemSecondaryAction, Paper, InputAdornment } from '@mui/material';
-import { useState, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { Box, Container, Typography, Button, Modal, TextField, AppBar, Toolbar, List, ListItem, ListItemText, ListItemSecondaryAction, Paper, Tabs, Tab, Snackbar, Alert } from '@mui/material';
+import { Camera } from "react-camera-pro";
 import { firestore } from '@/firebase';
 import { collection, getDocs, query, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore/lite';
+import OpenAI from "openai";
+
+const openai = new OpenAI({
+  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
+  dangerouslyAllowBrowser: true // Note: This is not recommended for production use
+});
 
 const modalStyle = {
   position: 'absolute',
@@ -16,15 +23,60 @@ const modalStyle = {
   borderRadius: 2,
 };
 
+// Updated OpenAI Vision API function
+const classifyImageWithAPI = async (base64Image) => {
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "What pantry item is in this image? If it's a pantry item typically found in a pantry, respond with just the name of the item. If it's not a typical pantry item or not a food item at all, respond with 'not pantry item'." },
+            {
+              type: "image_url",
+              image_url: {
+                "url": `data:image/jpeg;base64,${base64Image}`,
+              },
+            },
+          ],
+        },
+      ],
+      max_tokens: 50
+    });
+
+    console.log('OpenAI API Response:', response);
+    return response.choices[0].message.content.trim();
+  } catch (error) {
+    console.error("Error calling OpenAI API:", error);
+    throw new Error('Failed to classify image');
+  }
+};
+
 export default function Home() {
   const [pantry, setPantry] = useState([]);
   const [open, setOpen] = useState(false);
-  const [itemname, setItemname] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filteredPantry, setFilteredPantry] = useState([]);
+  const [addItemMethod, setAddItemMethod] = useState(0); // 0 for text, 1 for camera
+  const [newItemName, setNewItemName] = useState('');
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [isApiKeySet, setIsApiKeySet] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const camera = useRef(null);
 
-  const handleOpen = () => setOpen(true);
-  const handleClose = () => setOpen(false);
+  useEffect(() => {
+    const checkApiKey = () => {
+      const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+      setIsApiKeySet(!!apiKey);
+      if (!apiKey) {
+        console.error('OpenAI API key is not set in environment variables');
+      } else {
+        console.log('API key is set');
+      }
+    };
+    checkApiKey();
+  }, []);
 
   const updatePantry = async () => {
     const snapshot = query(collection(firestore, 'pantry'));
@@ -75,6 +127,53 @@ export default function Home() {
     setFilteredPantry(filteredItems);
   };
 
+  const handleCapture = useCallback(async () => {
+    if (!isApiKeySet) {
+      setErrorMessage('OpenAI API key is not set. Cannot classify image.');
+      return;
+    }
+
+    setIsClassifying(true);
+    try {
+      const imageSrc = camera.current.takePhoto();
+      const base64Image = imageSrc.split(',')[1];
+      console.log('Sending image to OpenAI API...');
+      const classifiedItem = await classifyImageWithAPI(base64Image);
+      console.log('Classified item:', classifiedItem);
+      
+      if (classifiedItem.toLowerCase() === 'not pantry item') {
+        setErrorMessage('Please try with a pantry item.');
+        setIsClassifying(false);
+        return;
+      }
+      
+      await addItem(classifiedItem);
+      handleClose();
+    } catch (error) {
+      console.error('Error during image capture and classification:', error);
+      setErrorMessage('Failed to classify image. Please try again.');
+    } finally {
+      setIsClassifying(false);
+    }
+  }, [isApiKeySet, addItem]);
+
+  const handleOpen = () => setOpen(true);
+  const handleClose = () => {
+    setOpen(false);
+    setNewItemName('');
+    setAddItemMethod(0);
+    setErrorMessage('');
+  };
+
+  const handleAddItem = () => {
+    if (addItemMethod === 0 && newItemName.trim()) {
+      addItem(newItemName.trim());
+      handleClose();
+    } else if (addItemMethod === 1) {
+      handleCapture();
+    }
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <AppBar position="static">
@@ -89,6 +188,11 @@ export default function Home() {
       </AppBar>
 
       <Container maxWidth="md" sx={{ mt: 4, mb: 4, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+        {!isApiKeySet && (
+          <Paper elevation={3} sx={{ p: 2, mb: 2, bgcolor: 'warning.light' }}>
+            <Typography>Warning: OpenAI API key is not set. Image classification will not work.</Typography>
+          </Paper>
+        )}
         <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
           <TextField
             fullWidth
@@ -128,33 +232,59 @@ export default function Home() {
           <Typography id="modal-modal-title" variant="h6" component="h2" gutterBottom>
             Add New Item
           </Typography>
-          <TextField
-            autoFocus
-            margin="dense"
-            id="name"
-            label="Item Name"
-            type="text"
-            fullWidth
-            variant="outlined"
-            value={itemname}
-            onChange={(e) => setItemname(e.target.value)}
-          />
+          <Tabs value={addItemMethod} onChange={(e, newValue) => setAddItemMethod(newValue)} sx={{ mb: 2 }}>
+            <Tab label="Text" />
+            <Tab label="Camera" />
+          </Tabs>
+          {addItemMethod === 0 ? (
+            <TextField
+              autoFocus
+              margin="dense"
+              id="name"
+              label="Item Name"
+              type="text"
+              fullWidth
+              variant="outlined"
+              value={newItemName}
+              onChange={(e) => setNewItemName(e.target.value)}
+            />
+          ) : (
+            <>
+              <Camera ref={camera} aspectRatio={1} />
+              {!isApiKeySet && (
+                <Typography color="error" sx={{ mt: 1 }}>
+                  OpenAI API key is not set. Image classification will not work.
+                </Typography>
+              )}
+            </>
+          )}
           <Button
             fullWidth
             variant="contained"
-            onClick={() => {
-              if (itemname.trim()) {
-                addItem(itemname.trim());
-                setItemname('');
-                handleClose();
-              }
-            }}
+            onClick={handleAddItem}
+            disabled={isClassifying || (addItemMethod === 1 && !isApiKeySet)}
             sx={{ mt: 2 }}
           >
-            Add Item
+            {addItemMethod === 0 ? 'Add Item' : (isClassifying ? 'Classifying...' : 'Capture and Add Item')}
           </Button>
+          {errorMessage && (
+            <Typography color="error" sx={{ mt: 2 }}>
+              {errorMessage}
+            </Typography>
+          )}
         </Box>
       </Modal>
+
+      <Snackbar 
+        open={!!errorMessage} 
+        autoHideDuration={6000} 
+        onClose={() => setErrorMessage('')}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setErrorMessage('')} severity="error" sx={{ width: '100%' }}>
+          {errorMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
