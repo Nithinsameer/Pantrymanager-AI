@@ -86,6 +86,10 @@ export default function Home() {
   const camera = useRef(null);
 
   useEffect(() => {
+    console.log('Recipe state updated:', recipe);
+  }, [recipe]);
+  
+  useEffect(() => {
     const checkApiKey = () => {
       const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
       setIsApiKeySet(!!apiKey);
@@ -245,6 +249,7 @@ export default function Home() {
       }
       
       const generatedRecipe = await generateRecipe(ingredients);
+      console.log('Generated recipe:', generatedRecipe); // Add this line for debugging
       setRecipe(generatedRecipe);
       setRecipeModalOpen(true);
     } catch (error) {
@@ -371,70 +376,34 @@ export default function Home() {
         </Box>
       </Modal>
       <Modal
-        open={open}
-        onClose={handleClose}
-        aria-labelledby="modal-modal-title"
-        aria-describedby="modal-modal-description"
+        open={recipeModalOpen}
+        onClose={() => setRecipeModalOpen(false)}
+        aria-labelledby="recipe-modal-title"
+        aria-describedby="recipe-modal-description"
       >
-        <Box sx={modalStyle}>
-          <Typography id="modal-modal-title" variant="h6" component="h2" gutterBottom>
-            Add New Item
+        <Box sx={recipemodalStyle}>
+          <Typography id="recipe-modal-title" variant="h6" component="h2" gutterBottom>
+            Generated Recipe
           </Typography>
-          <Tabs value={addItemMethod} onChange={(e, newValue) => setAddItemMethod(newValue)} sx={{ mb: 2 }}>
-            <Tab label="Text" />
-            <Tab label="Camera" />
-          </Tabs>
-          {addItemMethod === 0 ? (
-            <TextField
-              autoFocus
-              margin="dense"
-              id="name"
-              label="Item Name"
-              type="text"
-              fullWidth
-              variant="outlined"
-              value={newItemName}
-              onChange={(e) => setNewItemName(e.target.value)}
-            />
+          {isGeneratingRecipe ? (
+            <CircularProgress />
+          ) : errorMessage ? (
+            <Typography color="error" sx={{ mt: 2 }}>
+              {errorMessage}
+            </Typography>
           ) : (
-            <>
-              <Camera 
-                ref={camera} 
-                aspectRatio={1} 
-                facingMode={facingMode}
-                numberOfCamerasCallback={(cameras) => {
-                  console.log('Number of cameras:', cameras);
-                }}
-              />
-              <Button
-                fullWidth
-                variant="outlined"
-                onClick={flipCamera}
-                sx={{ mt: 2, mb: 2 }}
-              >
-                Flip Camera
-              </Button>
-              {!isApiKeySet && (
-                <Typography color="error" sx={{ mt: 1 }}>
-                  OpenAI API key is not set. Image classification will not work.
-                </Typography>
-              )}
-            </>
+            <Typography id="recipe-modal-description" sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>
+              {recipe}
+            </Typography>
           )}
           <Button
             fullWidth
             variant="contained"
-            onClick={handleAddItem}
-            disabled={isClassifying || (addItemMethod === 1 && !isApiKeySet)}
+            onClick={() => setRecipeModalOpen(false)}
             sx={{ mt: 2 }}
           >
-            {addItemMethod === 0 ? 'Add Item' : (isClassifying ? 'Classifying...' : 'Capture and Add Item')}
+            Close
           </Button>
-          {errorMessage && (
-            <Typography color="error" sx={{ mt: 2 }}>
-              {errorMessage}
-            </Typography>
-          )}
         </Box>
       </Modal>
 
