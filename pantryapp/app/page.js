@@ -1,6 +1,13 @@
 'use client';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Box, Container, Typography, Button, Modal, TextField, AppBar, Toolbar, List, ListItem, ListItemText, ListItemSecondaryAction, Paper, Tabs, Tab, Snackbar, Alert, CircularProgress } from '@mui/material';
+import { 
+  Box, Container, Typography, Button, Modal, TextField, AppBar, Toolbar, 
+  Paper, Tabs, Tab, Snackbar, Alert, CircularProgress, Card, CardContent, 
+  CardActions, Grid, IconButton
+} from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
+import DeleteIcon from '@mui/icons-material/Delete';
 import { Camera } from "react-camera-pro";
 import { firestore } from '@/firebase';
 import { collection, getDocs, query, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore/lite';
@@ -324,48 +331,61 @@ export default function Home() {
           </Button>
         </Toolbar>
       </AppBar>
+
   
-      <Container maxWidth="md" sx={{ mt: 4, mb: 4, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-        {!isApiKeySet && (
-          <Paper elevation={3} sx={{ p: 2, mb: 2, bgcolor: 'warning.light' }}>
-            <Typography>Warning: OpenAI API key is not set. Image classification will not work.</Typography>
+        <Container maxWidth="md" sx={{ mt: 4, mb: 4, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+          {!isApiKeySet && (
+            <Paper elevation={3} sx={{ p: 2, mb: 2, bgcolor: 'warning.light' }}>
+              <Typography>Warning: OpenAI API key is not set. Image classification will not work.</Typography>
+            </Paper>
+          )}
+          <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
+            <TextField
+              fullWidth
+              variant="outlined"
+              placeholder="Search items..."
+              value={searchTerm}
+              onChange={handleSearchChange}
+            />
           </Paper>
-        )}
-        <Paper elevation={3} sx={{ p: 2, mb: 2 }}>
-          <TextField
-            fullWidth
-            variant="outlined"
-            placeholder="Search items..."
-            value={searchTerm}
-            onChange={handleSearchChange}
-          />
-        </Paper>
-  
-        <Paper elevation={3} sx={{ flexGrow: 1, overflow: 'auto' }}>
-          <List>
-            {filteredPantry.map(({ id, count }) => (
-              <ListItem
-                key={id}
-                divider
-                secondaryAction={
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Button onClick={() => decreaseItemCount(id)} size="small">-</Button>
-                    <Typography sx={{ mx: 1 }}>{count}</Typography>
-                    <Button onClick={() => increaseItemCount(id)} size="small">+</Button>
-                    <Button onClick={() => removeItem(id)} color="error" sx={{ ml: 2 }}>
-                      Delete
-                    </Button>
-                  </Box>
-                }
+
+          <Grid container spacing={2}>
+          {filteredPantry.map(({ id, count }) => (
+            <Grid item xs={12} sm={6} md={4} key={id}>
+              <Card 
+                elevation={3}
+                sx={{
+                  transition: '0.3s',
+                  '&:hover': {
+                    transform: 'translateY(-5px)',
+                    boxShadow: '0 4px 20px 0 rgba(0,0,0,0.12)',
+                  },
+                }}
               >
-                <ListItemText
-                  primary={id.charAt(0).toUpperCase() + id.slice(1)}
-                />
-              </ListItem>
-            ))}
-          </List>
-        </Paper>
-      </Container>
+                <CardContent>
+                  <Typography variant="h6" component="div" gutterBottom>
+                    {id.charAt(0).toUpperCase() + id.slice(1)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Quantity: {count}
+                  </Typography>
+                </CardContent>
+                <CardActions sx={{ justifyContent: 'space-between', padding: '8px 16px' }}>
+                  <IconButton size="small" onClick={() => decreaseItemCount(id)} color="primary">
+                    <RemoveIcon />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => increaseItemCount(id)} color="primary">
+                    <AddIcon />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => removeItem(id)} color="error">
+                    <DeleteIcon />
+                  </IconButton>
+                </CardActions>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+        </Container>
   
       <Modal
         open={open}
