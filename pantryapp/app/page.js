@@ -4,12 +4,33 @@ import { Box, Container, Typography, Button, Modal, TextField, AppBar, Toolbar, 
 import { Camera } from "react-camera-pro";
 import { firestore } from '@/firebase';
 import { collection, getDocs, query, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore/lite';
+import ReactMarkdown from 'react-markdown';
+import { styled } from '@mui/material/styles';
+
 import OpenAI from "openai";
 
 const openai = new OpenAI({
   apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
   dangerouslyAllowBrowser: true // Note: This is not recommended for production use
 });
+
+const StyledMarkdown = styled('div')(({ theme }) => ({
+  '& h1, & h2, & h3, & h4, & h5, & h6': {
+    marginTop: theme.spacing(2),
+    marginBottom: theme.spacing(1),
+  },
+  '& p': {
+    marginBottom: theme.spacing(2),
+  },
+  '& ul, & ol': {
+    marginBottom: theme.spacing(2),
+    paddingLeft: theme.spacing(3),
+  },
+  '& li': {
+    marginBottom: theme.spacing(1),
+  },
+}));
+
 
 const modalStyle = {
   position: 'absolute',
@@ -28,8 +49,8 @@ const recipemodalStyle = {
   top: '50%',
   left: '50%',
   transform: 'translate(-50%, -50%)',
-  width: '80%',
-  maxWidth: 800,
+  width: '90%',
+  maxWidth: 600,
   maxHeight: '90vh',
   bgcolor: 'background.paper',
   boxShadow: 24,
@@ -129,7 +150,17 @@ export default function Home() {
     await updatePantry();
   };
 
-  const removeItem = async (item) => {
+  const increaseItemCount = async (item) => {
+    const docRef = doc(collection(firestore, 'pantry'), item);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const { count } = docSnap.data();
+      await setDoc(docRef, { count: count + 1 });
+    }
+    await updatePantry();
+  };
+
+  const decreaseItemCount = async (item) => {
     const docRef = doc(collection(firestore, 'pantry'), item);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
@@ -140,6 +171,12 @@ export default function Home() {
         await deleteDoc(docRef);
       }
     }
+    await updatePantry();
+  };
+
+  const removeItem = async (item) => {
+    const docRef = doc(collection(firestore, 'pantry'), item);
+    await deleteDoc(docRef);
     await updatePantry();
   };
 
@@ -287,7 +324,7 @@ export default function Home() {
           </Button>
         </Toolbar>
       </AppBar>
-
+  
       <Container maxWidth="md" sx={{ mt: 4, mb: 4, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
         {!isApiKeySet && (
           <Paper elevation={3} sx={{ p: 2, mb: 2, bgcolor: 'warning.light' }}>
@@ -303,26 +340,33 @@ export default function Home() {
             onChange={handleSearchChange}
           />
         </Paper>
-
+  
         <Paper elevation={3} sx={{ flexGrow: 1, overflow: 'auto' }}>
           <List>
             {filteredPantry.map(({ id, count }) => (
-              <ListItem key={id} divider>
+              <ListItem
+                key={id}
+                divider
+                secondaryAction={
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Button onClick={() => decreaseItemCount(id)} size="small">-</Button>
+                    <Typography sx={{ mx: 1 }}>{count}</Typography>
+                    <Button onClick={() => increaseItemCount(id)} size="small">+</Button>
+                    <Button onClick={() => removeItem(id)} color="error" sx={{ ml: 2 }}>
+                      Delete
+                    </Button>
+                  </Box>
+                }
+              >
                 <ListItemText
                   primary={id.charAt(0).toUpperCase() + id.slice(1)}
-                  secondary={`Quantity: ${count}`}
                 />
-                <ListItemSecondaryAction>
-                  <Button onClick={() => removeItem(id)} color="error">
-                    Remove
-                  </Button>
-                </ListItemSecondaryAction>
               </ListItem>
             ))}
           </List>
         </Paper>
       </Container>
-
+  
       <Modal
         open={open}
         onClose={handleClose}
@@ -351,7 +395,22 @@ export default function Home() {
             />
           ) : (
             <>
-              <Camera ref={camera} aspectRatio={1} />
+              <Camera 
+                ref={camera} 
+                aspectRatio={1} 
+                facingMode={facingMode}
+                numberOfCamerasCallback={(cameras) => {
+                  console.log('Number of cameras:', cameras);
+                }}
+              />
+              <Button
+                fullWidth
+                variant="outlined"
+                onClick={flipCamera}
+                sx={{ mt: 2, mb: 2 }}
+              >
+                Flip Camera
+              </Button>
               {!isApiKeySet && (
                 <Typography color="error" sx={{ mt: 1 }}>
                   OpenAI API key is not set. Image classification will not work.
@@ -375,6 +434,7 @@ export default function Home() {
           )}
         </Box>
       </Modal>
+  
       <Modal
         open={recipeModalOpen}
         onClose={() => setRecipeModalOpen(false)}
@@ -392,9 +452,9 @@ export default function Home() {
               {errorMessage}
             </Typography>
           ) : (
-            <Typography id="recipe-modal-description" sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>
-              {recipe}
-            </Typography>
+            <StyledMarkdown>
+              <ReactMarkdown>{recipe}</ReactMarkdown>
+            </StyledMarkdown>
           )}
           <Button
             fullWidth
@@ -406,7 +466,7 @@ export default function Home() {
           </Button>
         </Box>
       </Modal>
-
+  
       <Snackbar 
         open={!!errorMessage} 
         autoHideDuration={6000} 
