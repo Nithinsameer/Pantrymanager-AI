@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Box, Container, Typography, Button, Modal, TextField, AppBar, Toolbar, List, ListItem, ListItemText, ListItemSecondaryAction, Paper, Tabs, Tab, Snackbar, Alert } from '@mui/material';
+import { Box, Container, Typography, Button, Modal, TextField, AppBar, Toolbar, List, ListItem, ListItemText, ListItemSecondaryAction, Paper, Tabs, Tab, Snackbar, Alert, CircularProgress } from '@mui/material';
 import { Camera } from "react-camera-pro";
 import { firestore } from '@/firebase';
 import { collection, getDocs, query, doc, setDoc, deleteDoc, getDoc } from 'firebase/firestore/lite';
@@ -21,6 +21,21 @@ const modalStyle = {
   boxShadow: 24,
   p: 4,
   borderRadius: 2,
+};
+
+const recipemodalStyle = {
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  width: '80%',
+  maxWidth: 800,
+  maxHeight: '90vh',
+  bgcolor: 'background.paper',
+  boxShadow: 24,
+  p: 4,
+  borderRadius: 2,
+  overflow: 'auto',
 };
 
 // Updated OpenAI Vision API function
@@ -63,6 +78,10 @@ export default function Home() {
   const [isClassifying, setIsClassifying] = useState(false);
   const [isApiKeySet, setIsApiKeySet] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [recipeModalOpen, setRecipeModalOpen] = useState(false);
+  const [recipe, setRecipe] = useState('');
+  const [isGeneratingRecipe, setIsGeneratingRecipe] = useState(false);
+
   const camera = useRef(null);
 
   useEffect(() => {
@@ -174,6 +193,67 @@ export default function Home() {
     }
   };
 
+  const getAllPantryItems = async () => {
+    const snapshot = query(collection(firestore, 'pantry'))
+    const pantryList = []
+    const docs = await getDocs(snapshot)
+    docs.forEach((doc) => {
+      pantryList.push(doc.id)
+    })
+    return pantryList
+  }
+
+  const generateRecipe = async (ingredients) => {
+    try {
+      console.log('Generating recipe with ingredients:', ingredients);
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "You are a helpful assistant that generates recipes based on available ingredients."
+          },
+          {
+            role: "user",
+            content: `Generate a recipe using some or all of these ingredients: ${ingredients.join(', ')}. Provide only a list of ingredients with quantities and succinct step-by-step instructions.`
+          }
+        ],
+        max_tokens: 500
+      });
+  
+      console.log('OpenAI API Response:', response);
+      return response.choices[0].message.content.trim();
+    } catch (error) {
+      console.error("Error calling OpenAI API:", error);
+      if (error.response) {
+        console.error("OpenAI API error response:", error.response.data);
+      }
+      throw new Error('Failed to generate recipe: ' + error.message);
+    }
+  };
+
+  const handleGenerateRecipe = async () => {
+    setIsGeneratingRecipe(true);
+    setErrorMessage('');
+    try {
+      const ingredients = await getAllPantryItems();
+      console.log('Retrieved pantry items:', ingredients);
+      
+      if (ingredients.length === 0) {
+        throw new Error('No ingredients found in the pantry.');
+      }
+      
+      const generatedRecipe = await generateRecipe(ingredients);
+      setRecipe(generatedRecipe);
+      setRecipeModalOpen(true);
+    } catch (error) {
+      console.error('Error in handleGenerateRecipe:', error);
+      setErrorMessage(`Failed to generate recipe: ${error.message}`);
+    } finally {
+      setIsGeneratingRecipe(false);
+    }
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <AppBar position="static">
@@ -181,6 +261,14 @@ export default function Home() {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Pantry Manager
           </Typography>
+          <Button 
+            color="inherit" 
+            onClick={handleGenerateRecipe}
+            disabled={isGeneratingRecipe}
+            startIcon={isGeneratingRecipe ? <CircularProgress size={20} color="inherit" /> : null}
+          >
+            {isGeneratingRecipe ? 'Generating...' : 'Generate Recipe'}
+          </Button>
           <Button color="inherit" onClick={handleOpen}>
             Add Item
           </Button>
@@ -272,6 +360,37 @@ export default function Home() {
               {errorMessage}
             </Typography>
           )}
+        </Box>
+      </Modal>
+      <Modal
+        open={recipeModalOpen}
+        onClose={() => setRecipeModalOpen(false)}
+        aria-labelledby="recipe-modal-title"
+        aria-describedby="recipe-modal-description"
+      >
+        <Box sx={recipemodalStyle}>
+          <Typography id="recipe-modal-title" variant="h6" component="h2" gutterBottom>
+            Generated Recipe
+          </Typography>
+          {isGeneratingRecipe ? (
+            <Typography>Generating recipe...</Typography>
+          ) : errorMessage ? (
+            <Typography color="error" sx={{ mt: 2 }}>
+              {errorMessage}
+            </Typography>
+          ) : (
+            <Typography id="recipe-modal-description" sx={{ mt: 2, whiteSpace: 'pre-wrap' }}>
+              {recipe}
+            </Typography>
+          )}
+          <Button
+            fullWidth
+            variant="contained"
+            onClick={() => setRecipeModalOpen(false)}
+            sx={{ mt: 2 }}
+          >
+            Close
+          </Button>
         </Box>
       </Modal>
 
